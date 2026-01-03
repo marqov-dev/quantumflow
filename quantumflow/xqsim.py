@@ -13,12 +13,12 @@ https://github.com/quantumlib/qsim
 
 """
 
-from typing import Optional
+from typing import Dict, Optional
 
 from .circuits import Circuit
 from .gatesets import QSIM_GATES
 from .states import State
-from .stdops import Simulator
+from .stdops import MeasurementResult, Simulator
 from .translate import circuit_translate
 from .xcirq import circuit_to_cirq
 
@@ -61,6 +61,40 @@ class QSimSimulator(Simulator):
         res = sim.simulate(self._qsim_circuit)
         tensor = res.state_vector()
         return State(tensor, self.qubits)
+
+    def run_and_measure(self, shots: int = 1000) -> MeasurementResult:
+        """Run the circuit and perform shot-based measurement using qsim's
+        native sampling via Cirq.
+
+        Args:
+            shots: Number of measurement shots to perform.
+
+        Returns:
+            MeasurementResult with measurement counts and statistics.
+        """
+        try:
+            import cirq
+            import qsimcirq
+        except ModuleNotFoundError as err:  # pragma: no cover
+            raise ModuleNotFoundError(_IMPORT_ERROR_MSG) from err
+
+        # Create a copy of the cirq circuit with measurements
+        cirq_circuit = self._cirq.copy()
+        cirq_qubits = sorted(cirq_circuit.all_qubits())
+        cirq_circuit.append(cirq.measure(*cirq_qubits, key="result"))
+
+        # Run with qsim sampling
+        sim = qsimcirq.QSimSimulator()
+        result = sim.run(cirq_circuit, repetitions=shots)
+
+        # Convert measurements to counts
+        measurements = result.measurements["result"]
+        counts: Dict[str, int] = {}
+        for row in measurements:
+            bitstring = "".join(str(b) for b in row)
+            counts[bitstring] = counts.get(bitstring, 0) + 1
+
+        return MeasurementResult(counts=counts, shots=shots)
 
 
 def translate_circuit_to_qsim(circ: Circuit) -> Circuit:

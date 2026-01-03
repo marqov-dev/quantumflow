@@ -156,4 +156,30 @@ def test_braketsimulator() -> None:
     assert qf.states_close(circ.run(), sim.run())
 
 
+def test_braket_run_and_measure() -> None:
+    """Test BraketSimulator.run_and_measure with Bell state."""
+    circ = qf.Circuit([qf.H(0), qf.CNot(0, 1)])
+    sim = BraketSimulator(circ)
+
+    result = sim.run_and_measure(shots=1000)
+
+    # Bell state should only produce "00" and "11"
+    assert result.shots == 1000
+    total = sum(result.counts.values())
+    assert total == 1000
+
+    # With 1000 shots, very unlikely to get 01 or 10
+    assert result.counts.get("01", 0) == 0
+    assert result.counts.get("10", 0) == 0
+
+
+def test_braket_run_and_measure_deterministic() -> None:
+    """Test BraketSimulator.run_and_measure with deterministic circuit."""
+    # |1> state should always measure 1
+    circ = qf.Circuit([qf.X(0)])
+    sim = BraketSimulator(circ)
+    result = sim.run_and_measure(shots=100)
+    assert result.counts == {"1": 100}
+
+
 # fin

@@ -21,13 +21,13 @@ Interface between IBM's Qiskit and QuantumFlow
 # since you might want to use those gates in QuantumFlow without loading
 # qiskit
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 from .circuits import Circuit
 from .gatesets import QISKIT_GATES
 from .states import State
 from .stdgates import STDGATES
-from .stdops import Initialize, Simulator
+from .stdops import Initialize, MeasurementResult, Simulator
 from .translate import circuit_translate
 from .utils import invert_map
 
@@ -117,6 +117,39 @@ class QiskitSimulator(Simulator):
         if ket is not None:
             res = res.permute(ket.qubits)
         return res
+
+    def run_and_measure(self, shots: int = 1000) -> MeasurementResult:
+        """Run the circuit and perform shot-based measurement using Qiskit's
+        native sampling.
+
+        Args:
+            shots: Number of measurement shots to perform.
+
+        Returns:
+            MeasurementResult with measurement counts and statistics.
+        """
+        from qiskit_aer import AerSimulator
+
+        circ = self.circuit
+        qkcircuit = circuit_to_qiskit(circ, translate=True)
+        qkcircuit.measure_all()
+
+        simulator = AerSimulator()
+        job = simulator.run(qkcircuit, shots=shots)
+        result = job.result()
+        qiskit_counts = result.get_counts()
+
+        # Qiskit returns counts with keys in reverse qubit order
+        # We need to reverse them to match QuantumFlow's convention
+        counts: Dict[str, int] = {}
+        for bitstring, count in qiskit_counts.items():
+            # Remove any spaces that qiskit might add
+            bitstring = bitstring.replace(" ", "")
+            # Reverse the bitstring to match QF qubit ordering
+            reversed_bitstring = bitstring[::-1]
+            counts[reversed_bitstring] = count
+
+        return MeasurementResult(counts=counts, shots=shots)
 
 
 def qiskit_to_circuit(qkcircuit: "qiskit.QuantumCircuit") -> Circuit:

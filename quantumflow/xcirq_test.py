@@ -304,4 +304,30 @@ def test_circuit_to_cirq_unitary() -> None:
     assert qf.circuits_close(circ0, circ1)
 
 
+def test_cirq_run_and_measure() -> None:
+    """Test CirqSimulator.run_and_measure with Bell state."""
+    circ = qf.Circuit([qf.H(0), qf.CNot(0, 1)])
+    sim = CirqSimulator(circ)
+
+    result = sim.run_and_measure(shots=1000)
+
+    # Bell state should only produce "00" and "11"
+    assert result.shots == 1000
+    total = sum(result.counts.values())
+    assert total == 1000
+
+    # With 1000 shots, very unlikely to get 01 or 10
+    assert result.counts.get("01", 0) == 0
+    assert result.counts.get("10", 0) == 0
+
+
+def test_cirq_run_and_measure_deterministic() -> None:
+    """Test CirqSimulator.run_and_measure with deterministic circuit."""
+    # |1> state should always measure 1
+    circ = qf.Circuit([qf.X(0)])
+    sim = CirqSimulator(circ)
+    result = sim.run_and_measure(shots=100)
+    assert result.counts == {"1": 100}
+
+
 # fin

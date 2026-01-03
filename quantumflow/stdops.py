@@ -32,6 +32,7 @@ channels, circuits, or DAGCircuit's.
 import inspect
 import textwrap
 from abc import abstractmethod
+from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
@@ -61,6 +62,7 @@ from .var import Variable
 __all__ = [
     "Moment",
     "Measure",
+    "MeasurementResult",
     "Reset",
     "Initialize",
     "Barrier",
@@ -76,6 +78,31 @@ __all__ = [
     "Project0",
     "Project1",
 ]
+
+
+@dataclass
+class MeasurementResult:
+    """Result of shot-based measurement of a quantum circuit.
+
+    Attributes:
+        counts: Dictionary mapping bitstrings to observed counts.
+            Bitstring format is MSB-first, e.g., "00", "01", "10", "11" for 2 qubits.
+        shots: Total number of measurement shots performed.
+    """
+
+    counts: Dict[str, int]
+    shots: int
+
+    def probabilities(self) -> Dict[str, float]:
+        """Return probabilities for each observed bitstring."""
+        return {k: v / self.shots for k, v in self.counts.items()}
+
+    def most_common(self, n: Optional[int] = None) -> List[Tuple[str, int]]:
+        """Return the n most common bitstrings and their counts."""
+        sorted_counts = sorted(self.counts.items(), key=lambda x: x[1], reverse=True)
+        if n is not None:
+            return sorted_counts[:n]
+        return sorted_counts
 
 
 class Moment(Sequence, Operation):
@@ -446,6 +473,34 @@ class Simulator(Operation):
     @abstractmethod
     def run(self, ket: Optional[State] = None) -> State:
         raise NotImplementedError()
+
+    def run_and_measure(self, shots: int = 1000) -> "MeasurementResult":
+        """Run the circuit and perform shot-based measurement.
+
+        This default implementation runs statevector simulation and samples
+        from the resulting probability distribution. Subclasses may override
+        to use native backend sampling when available.
+
+        Args:
+            shots: Number of measurement shots to perform.
+
+        Returns:
+            MeasurementResult with measurement counts and statistics.
+        """
+        state = self.run()
+        N = len(self.qubits)
+        probs = np.real(state.probabilities()).flatten()
+
+        # Sample from probability distribution
+        outcomes = np.random.choice(2**N, size=shots, p=probs)
+
+        # Count occurrences and convert to bitstrings
+        counts: Dict[str, int] = {}
+        for outcome in outcomes:
+            bitstring = format(outcome, f"0{N}b")
+            counts[bitstring] = counts.get(bitstring, 0) + 1
+
+        return MeasurementResult(counts=counts, shots=shots)
 
 
 # end class Simulator

@@ -24,7 +24,7 @@ Interface between Google's Cirq and QuantumFlow
 # Conventions
 # cqc: Abbreviation for Cirq circuit
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 import numpy as np
 
@@ -57,7 +57,7 @@ from .stdgates import (
     Z,
     ZPow,
 )
-from .stdops import Simulator
+from .stdops import MeasurementResult, Simulator
 from .translate.translations import circuit_translate
 
 if TYPE_CHECKING:
@@ -106,6 +106,40 @@ class CirqSimulator(Simulator):
         res = sim.simulate(self._cqc, initial_state=tensor)
         tensor = res.state_vector()  # type:ignore  # Needed for cirq <0.10.0
         return State(tensor, ket.qubits, ket.memory)
+
+    def run_and_measure(self, shots: int = 1000) -> MeasurementResult:
+        """Run the circuit and perform shot-based measurement using Cirq's
+        native sampling.
+
+        Args:
+            shots: Number of measurement shots to perform.
+
+        Returns:
+            MeasurementResult with measurement counts and statistics.
+        """
+        try:
+            import cirq
+        except ModuleNotFoundError as err:  # pragma: no cover
+            raise ModuleNotFoundError(_IMPORT_ERROR_MSG) from err
+
+        # Create a copy of the circuit with measurements
+        cqc_with_measure = self._cqc.copy()
+        cqc_qubits = sorted(cqc_with_measure.all_qubits())
+        cqc_with_measure.append(cirq.measure(*cqc_qubits, key="result"))
+
+        # Run with sampling
+        sim = cirq.Simulator()
+        result = sim.run(cqc_with_measure, repetitions=shots)
+
+        # Convert measurements to counts
+        # Each row is a shot, each column is a qubit
+        measurements = result.measurements["result"]
+        counts: Dict[str, int] = {}
+        for row in measurements:
+            bitstring = "".join(str(b) for b in row)
+            counts[bitstring] = counts.get(bitstring, 0) + 1
+
+        return MeasurementResult(counts=counts, shots=shots)
 
 
 def from_cirq_qubit(qb: "cirq.Qid") -> Qubit:

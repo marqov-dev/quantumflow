@@ -214,4 +214,63 @@ def test_projectors() -> None:
     assert not qf.almost_unitary(qf.Project1())
 
 
+def test_measurement_result() -> None:
+    """Test MeasurementResult dataclass."""
+    from quantumflow.stdops import MeasurementResult
+
+    counts = {"00": 500, "11": 500}
+    result = MeasurementResult(counts=counts, shots=1000)
+
+    assert result.shots == 1000
+    assert result.counts == counts
+
+    # Test probabilities
+    probs = result.probabilities()
+    assert probs["00"] == 0.5
+    assert probs["11"] == 0.5
+
+    # Test most_common
+    most = result.most_common(1)
+    assert len(most) == 1
+    assert most[0][1] == 500
+
+    all_common = result.most_common()
+    assert len(all_common) == 2
+
+
+def test_qfsimulator_run_and_measure() -> None:
+    """Test run_and_measure on QFSimulator (base implementation)."""
+    # Create a Bell state circuit
+    circ = qf.Circuit([qf.H(0), qf.CNot(0, 1)])
+    sim = qf.QFSimulator(circ)
+
+    result = sim.run_and_measure(shots=1000)
+
+    # Should get approximately equal "00" and "11" outcomes
+    assert result.shots == 1000
+    assert "00" in result.counts or "11" in result.counts
+    total = sum(result.counts.values())
+    assert total == 1000
+
+    # Bell state should not have "01" or "10"
+    # (with very high probability for 1000 shots)
+    assert result.counts.get("01", 0) == 0
+    assert result.counts.get("10", 0) == 0
+
+
+def test_run_and_measure_single_qubit() -> None:
+    """Test run_and_measure on single qubit circuits."""
+    # |0> state should always measure 0
+    circ = qf.Circuit([qf.I(0)])
+    sim = qf.QFSimulator(circ)
+    result = sim.run_and_measure(shots=100)
+    assert result.counts == {"0": 100}
+
+    # |1> state should always measure 1
+    circ = qf.Circuit([qf.X(0)])
+    sim = qf.QFSimulator(circ)
+    result = sim.run_and_measure(shots=100)
+    assert result.counts == {"1": 100}
+
+
 # fin

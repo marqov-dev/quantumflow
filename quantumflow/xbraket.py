@@ -24,7 +24,7 @@ from .gatesets import BRAKET_GATES
 from .ops import UnitaryGate
 from .states import State
 from .stdgates import STDGATES
-from .stdops import Simulator
+from .stdops import MeasurementResult, Simulator
 from .translate import circuit_translate
 from .utils import invert_map
 
@@ -200,6 +200,32 @@ class BraketSimulator(Simulator):
         res = State(tensor, self.qubits)
 
         return res
+
+    def run_and_measure(self, shots: int = 1000) -> MeasurementResult:
+        """Run the circuit and perform shot-based measurement using Braket's
+        native sampling.
+
+        Args:
+            shots: Number of measurement shots to perform.
+
+        Returns:
+            MeasurementResult with measurement counts and statistics.
+        """
+        try:
+            from braket.devices import LocalSimulator
+        except ModuleNotFoundError as err:  # pragma: no cover
+            raise ModuleNotFoundError(_IMPORT_ERROR_MSG) from err
+
+        circ = self.circuit
+        bkcircuit = circuit_to_braket(circ, translate=True)
+
+        device = LocalSimulator()
+        result = device.run(bkcircuit, shots=shots).result()
+
+        # Convert Counter to regular dict with string keys
+        counts = dict(result.measurement_counts)
+
+        return MeasurementResult(counts=counts, shots=shots)
 
 
 # fin
