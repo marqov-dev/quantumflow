@@ -21,6 +21,7 @@ import numpy as np
 
 from .circuits import Circuit
 from .gatesets import BRAKET_GATES
+from .ops import UnitaryGate
 from .states import State
 from .stdgates import STDGATES
 from .stdops import Simulator
@@ -78,8 +79,6 @@ BRAKET_TO_QF = {
 }
 """Map from braket operation names to QuantumFlow names"""
 
-# TODO: Unitary
-
 
 def braket_to_circuit(bkcircuit: "bkCircuit") -> Circuit:
     """Convert a braket.Circuit to QuantumFlow's Circuit"""
@@ -95,6 +94,12 @@ def braket_to_circuit(bkcircuit: "bkCircuit") -> Circuit:
         op = inst.operator
         name = op.name
         qubits = [int(q) for q in inst.target]
+
+        # Handle Unitary gates separately (not in BRAKET_TO_QF mapping)
+        if name == "Unitary":
+            matrix = op.to_matrix()
+            circ += UnitaryGate(matrix, qubits)
+            continue
 
         if name not in BRAKET_TO_QF:
             raise NotImplementedError("Unknown braket operation")
@@ -150,6 +155,12 @@ def circuit_to_braket(circ: Circuit, translate: bool = False) -> "bkCircuit":
     QF_TO_BRAKET = invert_map(BRAKET_TO_QF)
 
     for op in circ:
+        # Handle UnitaryGate separately (not in QF_TO_BRAKET mapping)
+        if isinstance(op, UnitaryGate):
+            matrix = op.asoperator()
+            bkcircuit.unitary(matrix=matrix, targets=list(op.qubits))
+            continue
+
         name = QF_TO_BRAKET[op.name].lower()
         params = [float(p) for p in op.params]
         if name in ["xx", "yy", "zz"]:
