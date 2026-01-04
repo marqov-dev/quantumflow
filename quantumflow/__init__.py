@@ -60,6 +60,7 @@ from .gates import *
 from .gatesets import *
 from .gradients import *
 from .info import *
+from .metrics import *
 from .ops import *
 from .paulialgebra import *
 from .qubits import *
