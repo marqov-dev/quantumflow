@@ -5,6 +5,8 @@
 
 """Unit tests for quantumflow.metrics"""
 
+import pytest
+
 import quantumflow as qf
 
 
@@ -148,6 +150,142 @@ def test_analyze_with_ccnot() -> None:
     assert metrics.two_qubit_count == 0  # CCNot is 3-qubit, not 2-qubit
     assert metrics.size == 1
     assert metrics.width == 3
+
+
+# --- BackendReport and TranspilationReport tests ---
+
+
+def test_backend_report_overhead_calculations() -> None:
+    """Test BackendReport overhead property calculations."""
+    original = qf.CircuitMetrics(
+        depth=10,
+        size=20,
+        width=2,
+        two_qubit_count=5,
+        two_qubit_depth=5,
+        gate_counts={},
+    )
+    transpiled = qf.CircuitMetrics(
+        depth=15,
+        size=30,
+        width=2,
+        two_qubit_count=8,
+        two_qubit_depth=8,
+        gate_counts={},
+    )
+
+    report = qf.BackendReport(backend="test", original=original, transpiled=transpiled)
+
+    assert report.depth_overhead == 1.5
+    assert report.size_overhead == 1.5
+    assert report.two_qubit_overhead == 1.6
+
+
+def test_backend_report_edge_cases() -> None:
+    """Test BackendReport with zero original values."""
+    original = qf.CircuitMetrics(
+        depth=0,
+        size=0,
+        width=0,
+        two_qubit_count=0,
+        two_qubit_depth=0,
+        gate_counts={},
+    )
+    transpiled = qf.CircuitMetrics(
+        depth=0,
+        size=0,
+        width=0,
+        two_qubit_count=0,
+        two_qubit_depth=0,
+        gate_counts={},
+    )
+
+    report = qf.BackendReport(backend="test", original=original, transpiled=transpiled)
+
+    assert report.depth_overhead == 0.0
+    assert report.size_overhead == 0.0
+    assert report.two_qubit_overhead == 0.0
+
+
+def test_compare_backends_basic() -> None:
+    """Test compare_backends with a simple circuit."""
+    circ = qf.Circuit([qf.H(0), qf.CNot(0, 1)])
+    report = qf.compare_backends(circ, backends=["qiskit", "cirq"])
+
+    assert "qiskit" in report.backends
+    assert "cirq" in report.backends
+    assert report.original.size == 2
+
+
+def test_compare_backends_with_translation() -> None:
+    """Test that Can gate expands differently per backend."""
+    # Can gate is not native to most backends, should expand
+    circ = qf.Circuit([qf.Can(0.1, 0.2, 0.3, 0, 1)])
+    report = qf.compare_backends(circ)
+
+    # Different backends should have different transpiled sizes
+    sizes = {b: r.transpiled.size for b, r in report.backends.items()}
+    # At least one backend should have expanded the circuit
+    assert any(s > 1 for s in sizes.values())
+
+
+def test_transpilation_report_best_methods() -> None:
+    """Test best_for_depth and best_for_two_qubit methods."""
+    circ = qf.Circuit([qf.Can(0.1, 0.2, 0.3, 0, 1)])
+    report = qf.compare_backends(circ)
+
+    # Should return valid backend names
+    assert report.best_for_depth() in report.backends
+    assert report.best_for_two_qubit() in report.backends
+
+
+def test_transpilation_report_summary() -> None:
+    """Test summary table generation."""
+    circ = qf.ghz_circuit(range(3))
+    report = qf.compare_backends(circ, backends=["qiskit", "braket"])
+
+    summary = report.summary()
+    assert "Backend" in summary
+    assert "qiskit" in summary
+    assert "braket" in summary
+    assert "Depth" in summary
+    assert "2Q Gates" in summary
+
+
+def test_compare_backends_empty_circuit() -> None:
+    """Test compare_backends handles empty circuits."""
+    circ = qf.Circuit()
+    report = qf.compare_backends(circ, backends=["qiskit"])
+
+    assert report.original.size == 0
+    assert report.backends["qiskit"].transpiled.size == 0
+
+
+def test_compare_backends_unknown_backend() -> None:
+    """Test that unknown backend raises error."""
+    circ = qf.Circuit([qf.H(0)])
+    with pytest.raises(ValueError, match="Unknown backend"):
+        qf.compare_backends(circ, backends=["unknown_backend"])
+
+
+def test_compare_backends_all_supported() -> None:
+    """Test compare_backends with all supported backends."""
+    circ = qf.Circuit([qf.H(0), qf.CNot(0, 1)])
+    report = qf.compare_backends(circ)  # No backends specified = all
+
+    # Should have all supported backends
+    assert "braket" in report.backends
+    assert "cirq" in report.backends
+    assert "qiskit" in report.backends
+    assert "pyquil" in report.backends
+    assert "qsim" in report.backends
+
+
+def test_supported_backends_constant() -> None:
+    """Test SUPPORTED_BACKENDS is properly exported."""
+    assert "braket" in qf.SUPPORTED_BACKENDS
+    assert "cirq" in qf.SUPPORTED_BACKENDS
+    assert "qiskit" in qf.SUPPORTED_BACKENDS
 
 
 # fin
