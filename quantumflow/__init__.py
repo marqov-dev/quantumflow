@@ -74,6 +74,7 @@ from .transpile import *
 from .var import *
 from .visualization import *
 from .benchmark import *
+from .device_noise import *
 from .xbraket import *
 from .xcirq import *
 from .xforest import *
